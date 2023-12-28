@@ -1,30 +1,47 @@
 
-# APL stemness
+# Deconvolution
 
-This is the source code for APL deconvolution analysis in APL stemness project.
+## SVR
 
-This script needs to be run in the R environment and is applicable to various platforms.
+``` {r eval = TRUE}
 
-The detailed tutorial is available at: https://nrctm-bioinfo.github.io/APL_stemness/
+deconvolution <- function(exp.mat, sig.mat, ncores) {
+  
+  merge.mat <- list(y = as.matrix(exp.mat[rownames(sig.mat), ]), x = as.matrix(sig.mat) )
+  nu <- c(0.25, 0.5, 0.75, 1)
 
+  res <- parallel::mclapply(seq_len(ncol(merge.mat$y)), function(z) {
+    lapply(nu, function(i) {
+      suppressMessages(
+        suppressWarnings(
+          svm(x = merge.mat$x,
+              y = as.vector(merge.mat$y[,z]), 
+              nu = i, 
+              type = 'nu-regression',
+              scale = FALSE, 
+              kernel = 'linear')
+        ))
+    })
+  }, mc.cores = ncores)
+  
+  rmse <-  lapply(res, function(z) { 
+    lapply(z, function(i){
+      sqrt(sum(i$residuals ^ 2)/length(i$residuals))
+    })
+  })
+  rmse <- unlist(lapply(rmse, function(z) which.min(unlist(z))))
+  # extract models with min rmse
+  mod <- lapply(seq_along(res), function(z) {res[[z]][[rmse[z]]] })
+  
+  # return coefficients
+  coefs <- lapply(mod, function(z) {as.numeric(t(z$coefs) %*% z$SV)})
+  coefs <- as.data.frame(t(data.frame(coefs)))
+  rownames(coefs) <- colnames(merge.mat$y)
+  colnames(coefs) <- colnames(merge.mat$x)
+  
+  return(coefs)
+}
 
-## 1 Installation
-
-### GitHub
-
-To download code from GitHub: `git clone `
-
-Librarying the source code:
-
-``` {r eval = FALSE}
-
-source("APL_deconvolution.R")
-
-```
-
-## 2 Running demos
-
-``` {r eval = FALSE}
 
 ## Read expression data
 exp.tpm <- readRDS("data/test_sample.deconvolution.TPM.rds")
@@ -33,13 +50,17 @@ exp.tpm <- readRDS("data/test_sample.deconvolution.TPM.rds")
 apl.signature <- read.table("data/CIBERSORTx_sig_1w_branch_mix_out.txt", header = T, row.names = 1)
 
 exp.tpm %>% dim()
-
 exp.tpm %>% head()
 
 decon.bulk <- deconvolution(exp.tpm, apl.signature, 2)
 
 decon.bulk
 
+```
+
+## Regression
+
+``` {r eval = TRUE}
 
 # Read model
 linear.model <- readRDS("data/PredModel.rds")
@@ -60,7 +81,6 @@ colnames(pred.score) <- branch.name
 # Coefficeint matrix
 pred.score
 
-
 pred.percent <- pred.score
 for (i in 1:nrow(pred.percent)) {
   if (sum(pred.percent[i, ] < 0) > 0) {
@@ -74,36 +94,5 @@ for (i in 1:nrow(pred.percent)) {
 # Proportion estimation
 pred.percent
 
-
-
 ```
-
-## 3 Running time
-
-For samples less than 50, all code will be executed within 10 minutes. And for 500 samples, the estimated run time is approximately one hour. 
-
-## 4 Current version
-
-Version 1.0.1
-
-
-## 5 Reported bugs and solutions
-
-If there is any error in installing the scripts, please contact us via e-mail dyt12423@rjh.com.cn
-
-
-## 6 Reference
-
-[1] Zeng, A.G.X. et al. A cellular hierarchy framework for understanding heterogeneity and predicting drug response in acute myeloid leukemia. Nat Med (2022).
-
-[2] Tan, Y. et al. A PML/RARα direct target atlas redefines transcriptional deregulation in acute promyelocytic leukemia. Blood 137, 1503-1516 (2021).
-
-
-
-
-
-
-
-
-
 

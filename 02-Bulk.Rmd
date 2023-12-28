@@ -1,0 +1,67 @@
+
+# Bulk
+
+## Pre-processing
+
+In bulk RNA-seq analysis, Salmon was used to generate the count and transcripts per kilobase of exon model per million mapped reads (TPM) matrix. For normalization of the count matrix, we used DESeq2 to transform count matrix via `varianceStabilizingTransformation`. The limma package was used to calculate differentially expressed genes (DEGs) with significance level setting as adjusted P-value < 0.05 and log2FC > 0.58 or < -0.58 (Log2 Fold change 1.5).
+
+``` {r eval = FALSE}
+
+# Pre-processing of bulk RNA-seq data was performed using salmon
+gtf_file=${hg38}/gencode.v38.annotation.gtf
+out_path=${out_path}
+salmon_index=${salmon_index}
+
+$SALMON quant -p 8 -l IU -i ${salmon_index} -o ${out_path}/${id} -1 ${fq1} -2 ${fq2} -g ${gtf_file} --gcBias --validateMappings
+
+
+```
+
+Then the TPM and count matrices were generated.
+
+``` {r eval = FALSE}
+
+# read count data using DESeq2
+ddsHTSeq <- DESeqDataSetFromMatrix(countData = exp.count, DataFrame(condition), ~ condition)
+dds <- DESeq(ddsHTSeq)
+dds.vsd <- varianceStabilizingTransformation(dds, blind = TRUE)
+exp.vst <- assay(dds.vsd)
+exp.vst <- exp.vst - min(exp.vst)
+
+```
+
+## DEGs
+
+``` {r eval = FALSE}
+
+pdata <- meta.data
+pdata$con <- meta.data$EarlyDeath
+design <- model.matrix(~ 0 + as.factor(con), data = pdata)
+colnames(design) <- str_replace_all(colnames(design), fixed("as.factor(con)"), "")
+fit <- lmFit(exp.vst[, pdata$ID], design)
+
+# make contrast
+contrast <- makeContrasts(ED = ED - Alive,
+                          levels = design)
+fits <- contrasts.fit(fit, contrast)
+ebFit <- eBayes(fits)
+
+deg.data <- deg_sig_list[which(!is.na(deg_sig_list$adj.P.Val)), ]
+deg.data$logP <- -log10(deg.data$adj.P.Val)
+deg.data$group = "zz"
+deg.data$group[which( (deg.data$adj.P.Val < 0.05) & (deg.data$logFC > 0) )] = "up"
+deg.data$group[which( (deg.data$adj.P.Val < 0.05) & (deg.data$logFC < -0) )] = "down"
+deg.data$tag <- paste0("ED - Alive")
+deg.data$Gene <- rownames(deg.data)
+
+```
+
+
+
+
+
+
+
+
+
+

@@ -8,7 +8,7 @@ library(e1071)
 # ncores: cores used for analysis
 deconvolution <- function(exp.mat, sig.mat, ncores) {
 
-	message("Version 1.0.0")
+	message("Version 1.0.1")
 
   merge.mat <- list(y = as.matrix(exp.mat[rownames(sig.mat), ]), x = as.matrix(sig.mat) )
   nu <- c(0.25, 0.5, 0.75, 1)
